@@ -1,0 +1,40 @@
+# Development files
+node_modules/
+.DS_Store
+*.log
+.env
+.npm
+.yarn-integrity
+
+# Git files
+.git/
+.gitignore
+
+# Development and testing
+*.test.js
+*.spec.js
+coverage/
+.nyc_output/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Documentation source (keep compiled docs)
+# None to exclude - we want docs/ published
+
+# Build artifacts (if any in future)
+dist/
+build/

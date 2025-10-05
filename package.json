@@ -1,0 +1,43 @@
+{
+    "name": "meteor-cloud-run",
+    "version": "1.0.0",
+    "description": "A CLI tool to easily deploy Meteor.js applications to Google Cloud Run",
+    "main": "src/index.js",
+    "bin": {
+        "meteor-cloud-run": "./src/index.js"
+    },
+    "scripts": {
+        "test": "node test/manual-tests.js",
+        "test:manual": "node test/manual-tests.js",
+        "test:help": "node src/index.js --help",
+        "test:version": "node src/index.js --version",
+        "test:commands": "node test/test-commands.js",
+        "dev": "node src/index.js"
+    },
+    "keywords": [
+        "meteor",
+        "cloud-run",
+        "google-cloud",
+        "deployment",
+        "cli"
+    ],
+    "author": "Andrew Snow (@sussition)",
+    "license": "AGPL-3.0",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/sussition/meteor-cloud-run.git"
+    },
+    "homepage": "https://github.com/sussition/meteor-cloud-run#readme",
+    "bugs": {
+        "url": "https://github.com/sussition/meteor-cloud-run/issues"
+    },
+    "dependencies": {
+        "chalk": "^4.1.2",
+        "commander": "^9.5.0",
+        "fs-extra": "^11.3.0",
+        "inquirer": "^8.2.6"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
