@@ -326,16 +326,20 @@ async function executeCommandStreaming(command) {
       const seconds = Math.floor((duration % 60000) / 1000);
 
       // Check if deployment actually succeeded despite non-zero exit code
-      // gcloud builds submit returns exit code 1 for warnings (like IAM policy warnings)
+      // gcloud builds submit returns exit code 1 for warnings (like IAM policy warnings or log streaming issues)
       // but the deployment itself may have succeeded. We check the output for success indicators:
       // - "has been deployed and is serving" - Cloud Run deployment confirmation
       // - "Service URL:" - Service was created/updated successfully
       // - "DONE" + "Finished Step" - Cloud Build completed all steps
+      // - Log streaming error but build still running - need to check build status separately
       // Check both stdout and stderr as gcloud may output to either
       const combinedOutput = stdoutBuffer + stderrBuffer;
       const deploymentSucceeded = combinedOutput.includes('has been deployed and is serving') ||
                                    combinedOutput.includes('Service URL:') ||
                                    (combinedOutput.includes('DONE') && combinedOutput.includes('Finished Step'));
+
+      // Check if this is a log streaming permission issue (build may still succeed)
+      const isLogStreamingError = combinedOutput.includes('This tool can only stream logs if you are Viewer/Owner');
 
       if (code === 0 || (code === 1 && deploymentSucceeded)) {
         if (code === 1 && deploymentSucceeded) {
@@ -344,6 +348,11 @@ async function executeCommandStreaming(command) {
           verboseLog(`Command completed successfully in ${minutes}m ${seconds}s`);
         }
         resolve({ stdout: stdoutBuffer, stderr: stderrBuffer });
+      } else if (code === 1 && isLogStreamingError) {
+        // Log streaming failed but build is running - treat as success
+        // The calling code will need to check build status separately
+        verboseLog(`Log streaming unavailable but build is running (${minutes}m ${seconds}s elapsed)`);
+        resolve({ stdout: stdoutBuffer, stderr: stderrBuffer, needsStatusCheck: true });
       } else {
         verboseLog(`Command failed with exit code ${code} after ${minutes}m ${seconds}s`);
         // Only log detailed check info for exit code 1 (potential false negative)

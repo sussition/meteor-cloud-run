@@ -8,9 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2025-10-05
 
 ### Fixed
-- **Critical**: Force log streaming with `--stream-logs` flag to fix CI/CD deployment detection
-- Build logs now properly stream to stdout, allowing success detection to work in GitHub Actions
-- Streamlined verbose logging for deployment status checks
+- **Critical**: Fixed false deployment failures in CI/CD environments when log streaming is unavailable
+- Now detects log streaming permission errors and falls back to checking build status via `gcloud builds list`
+- Deployments in GitHub Actions and other CI/CD environments now correctly report success/failure
+
+### Improved
+- Better error handling for gcloud builds submit exit code 1 scenarios
+- Deployment verification now works in restricted permission environments
 
 ## [1.0.2] - 2025-10-05
 

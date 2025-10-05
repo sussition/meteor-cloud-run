@@ -842,7 +842,25 @@ async function deployCommand(options) {
     console.log('');
     
     // Stream the build logs to show progress
-    await executeCommandStreaming(buildCommand);
+    const buildResult = await executeCommandStreaming(buildCommand);
+
+    // If log streaming was unavailable, check build status separately
+    if (buildResult.needsStatusCheck) {
+      console.log(chalk.yellow('   ℹ️  Verifying build status...'));
+
+      // Get the most recent build for this project
+      const buildsListCmd = `gcloud builds list --project=${config.projectId} --limit=1 --format="value(status,id)"`;
+      const buildStatusResult = await executeCommand(buildsListCmd);
+      const [status, buildId] = buildStatusResult.stdout.trim().split('\t');
+
+      verboseLog(`Latest build ${buildId} status: ${status}`);
+
+      if (status !== 'SUCCESS') {
+        throw new Error(`Build did not complete successfully. Status: ${status}. Check build logs at: https://console.cloud.google.com/cloud-build/builds/${buildId}?project=${config.projectId}`);
+      }
+
+      console.log(chalk.green('   ✅ Build completed successfully'));
+    }
 
     // Access configuration is handled by --allow-unauthenticated flag in cloudbuild.yaml
     console.log(chalk.blue('🔐 Access permissions configured...'));
