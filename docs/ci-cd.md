@@ -56,17 +56,23 @@ SERVICE_ACCOUNT="ci-cd-deploy@${PROJECT_ID}.iam.gserviceaccount.com"
 
 for role in roles/run.admin \
            roles/cloudbuild.builds.editor \
+           roles/cloudbuild.builds.viewer \
            roles/artifactregistry.admin \
            roles/secretmanager.admin \
            roles/storage.admin \
            roles/compute.admin \
            roles/iam.serviceAccountUser \
-           roles/serviceusage.serviceUsageAdmin; do
+           roles/serviceusage.serviceUsageAdmin \
+           roles/resourcemanager.projectIamAdmin; do
   gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${SERVICE_ACCOUNT}" \
     --role="$role"
 done
 ```
+
+**Permission notes**:
+- `roles/cloudbuild.builds.viewer` - Required to view build logs in CI/CD pipelines
+- `roles/resourcemanager.projectIamAdmin` - Allows automatic configuration of service account permissions for secrets
 
 3. **Set up Workload Identity Pool:**
 
@@ -106,9 +112,9 @@ gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT \
   --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
 ```
 
-5. **Grant Cloud Run service account permissions:**
+5. **Grant Cloud Run service account permissions (optional):**
 
-The Cloud Run service needs access to read secrets at runtime:
+The CI/CD service account can now automatically configure permissions. However, if you want to set it up manually:
 
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
@@ -117,6 +123,8 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
+
+**Note**: With `roles/resourcemanager.projectIamAdmin` granted in step 2, meteor-cloud-run will configure this automatically during deployment.
 
 6. **Get your project details:**
 ```bash
