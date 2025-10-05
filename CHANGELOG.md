@@ -5,6 +5,22 @@ All notable changes to meteor-cloud-run will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-10-05
+
+### Fixed
+- **Critical**: Fixed false deployment failure when gcloud builds returns warnings (exit code 1)
+- Deployment now correctly succeeds when Cloud Build completes with IAM policy warnings
+- Added deployment success detection via output indicators instead of relying solely on exit codes
+
+### Improved
+- **CI/CD Documentation**: Complete GitHub Actions setup with Workload Identity Federation
+- Added GitHub Secrets integration instructions for secure settings management
+- Added all required IAM permissions (including `serviceusage.serviceUsageAdmin`)
+- Added Cloud SDK setup and gsutil credentials configuration
+- Added Cloud Run service account permissions for secret access
+- Clarified GitHub owner/organization setup for attribute conditions
+- Added settings file path configuration examples for subdirectory projects
+
 ## [1.0.0] - 2025-10-05
 
 ### Initial Release
