@@ -320,13 +320,27 @@ async function executeCommandStreaming(command) {
     // Handle process completion
     child.on('close', (code) => {
       clearInterval(progressTimer);
-      
+
       const duration = Date.now() - startTime;
       const minutes = Math.floor(duration / 60000);
       const seconds = Math.floor((duration % 60000) / 1000);
-      
-      if (code === 0) {
-        verboseLog(`Command completed successfully in ${minutes}m ${seconds}s`);
+
+      // Check if deployment actually succeeded despite non-zero exit code
+      // gcloud builds submit returns exit code 1 for warnings (like IAM policy warnings)
+      // but the deployment itself may have succeeded. We check the output for success indicators:
+      // - "has been deployed and is serving" - Cloud Run deployment confirmation
+      // - "Service URL:" - Service was created/updated successfully
+      // - "DONE" + "Finished Step" - Cloud Build completed all steps
+      const deploymentSucceeded = stdoutBuffer.includes('has been deployed and is serving') ||
+                                   stdoutBuffer.includes('Service URL:') ||
+                                   (stdoutBuffer.includes('DONE') && stdoutBuffer.includes('Finished Step'));
+
+      if (code === 0 || (code === 1 && deploymentSucceeded)) {
+        if (code === 1 && deploymentSucceeded) {
+          verboseLog(`Command completed with warnings (exit code ${code}) but deployment succeeded in ${minutes}m ${seconds}s`);
+        } else {
+          verboseLog(`Command completed successfully in ${minutes}m ${seconds}s`);
+        }
         resolve({ stdout: stdoutBuffer, stderr: stderrBuffer });
       } else {
         verboseLog(`Command failed with exit code ${code} after ${minutes}m ${seconds}s`);

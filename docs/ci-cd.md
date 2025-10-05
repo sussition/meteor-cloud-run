@@ -60,7 +60,8 @@ for role in roles/run.admin \
            roles/secretmanager.admin \
            roles/storage.admin \
            roles/compute.admin \
-           roles/iam.serviceAccountUser; do
+           roles/iam.serviceAccountUser \
+           roles/serviceusage.serviceUsageAdmin; do
   gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${SERVICE_ACCOUNT}" \
     --role="$role"
@@ -68,6 +69,11 @@ done
 ```
 
 3. **Set up Workload Identity Pool:**
+
+**Important**: In the command below, replace `YOUR_GITHUB_OWNER` with:
+- Your **GitHub username** if the repo is under your personal account (e.g., `andsnw`)
+- Your **organization name** if the repo is under an organization (e.g., `sussition`)
+
 ```bash
 # Create workload identity pool
 gcloud iam workload-identity-pools create "github" \
@@ -75,17 +81,21 @@ gcloud iam workload-identity-pools create "github" \
   --location="global" \
   --display-name="GitHub Actions Pool"
 
-# Create workload identity provider
+# Create workload identity provider - REPLACE 'YOUR_GITHUB_OWNER' BELOW
 gcloud iam workload-identity-pools providers create-oidc "github" \
   --project="$PROJECT_ID" \
   --location="global" \
   --workload-identity-pool="github" \
   --display-name="GitHub Provider" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.actor=assertion.actor" \
-  --issuer-uri="https://token.actions.githubusercontent.com"
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-condition="assertion.repository_owner == 'YOUR_GITHUB_OWNER'"
 ```
 
 4. **Allow repository to impersonate service account:**
+
+Replace `your-github-username/your-repository` with your actual repo (e.g., `sussition/meteor-cloud-run`).
+
 ```bash
 SERVICE_ACCOUNT="ci-cd-deploy@${PROJECT_ID}.iam.gserviceaccount.com"
 REPO="your-github-username/your-repository"
@@ -96,9 +106,21 @@ gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT \
   --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
 ```
 
-5. **Get your project details:**
+5. **Grant Cloud Run service account permissions:**
+
+The Cloud Run service needs access to read secrets at runtime:
+
 ```bash
-# Get project number and ID
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+6. **Get your project details:**
+```bash
+# Get project number and ID (needed for workflow configuration)
 PROJECT_ID=$(gcloud config get-value project)
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
@@ -106,9 +128,26 @@ echo "Project ID: $PROJECT_ID"
 echo "Project Number: $PROJECT_NUMBER"
 ```
 
-6. **GitHub Actions workflow:**
+7. **Add settings to GitHub Secrets:**
 
-Replace `PROJECT_NUMBER` and `PROJECT_ID` with your actual values from step 5.
+**Important**: Never commit `settings.json` files containing secrets to your repository.
+
+- Go to your repository → Settings → Secrets and variables → Actions
+- Click "New repository secret"
+- Name: `METEOR_SETTINGS_PROD`
+- Value: Paste the entire contents of your `settings-prod.json` file
+
+Add to your `.gitignore`:
+```gitignore
+# Secrets and settings files
+secrets/
+settings*.json
+!settings.example.json
+```
+
+8. **Create GitHub Actions workflow:**
+
+Replace `PROJECT_NUMBER` and `PROJECT_ID` with your actual values from step 6.
 
 ```yaml
 name: Deploy to Cloud Run
@@ -132,6 +171,17 @@ jobs:
           workload_identity_provider: 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github'
           service_account: 'ci-cd-deploy@PROJECT_ID.iam.gserviceaccount.com'
 
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure gsutil credentials
+        run: gcloud config set pass_credentials_to_gsutil true
+
+      - name: Create settings file
+        run: |
+          mkdir -p secrets
+          echo '${{ secrets.METEOR_SETTINGS_PROD }}' > secrets/settings-prod.json
+
       - name: Install meteor-cloud-run
         run: npm install -g meteor-cloud-run
 
@@ -139,6 +189,43 @@ jobs:
         run: meteor-cloud-run deploy
 ```
 
+**Important - Settings File Path Configuration:**
+
+The path where you create the settings file in the workflow **must match** the path in your config file. Both paths are relative to where you run the deploy command.
+
+For example, if your `.meteor-cloud-run/config.json` has:
+```json
+{
+  "settingsFile": "secrets/settings-prod.json",
+  ...
+}
+```
+
+Then your workflow must create the file at the same relative path:
+```yaml
+- name: Create settings file
+  run: |
+    mkdir -p secrets
+    echo '${{ secrets.METEOR_SETTINGS_PROD }}' > secrets/settings-prod.json
+```
+
+If your Meteor app is in a subdirectory (e.g., `webapp/`), adjust both accordingly:
+```yaml
+- name: Create settings file
+  run: |
+    mkdir -p webapp/secrets
+    echo '${{ secrets.METEOR_SETTINGS_PROD }}' > webapp/secrets/settings-prod.json
+
+- name: Deploy to Cloud Run
+  run: |
+    cd webapp
+    meteor-cloud-run deploy
+```
+
+**Notes:**
+- The settings file is created temporarily during the workflow from GitHub Secrets
+- It's never committed to the repository
+- Each deployment uses fresh secrets from GitHub Secrets
 
 ## Environment Variables
 
@@ -162,6 +249,11 @@ export VERBOSE=true
 
 ### Branch-Based Deployments
 
+Create separate GitHub Secrets for each environment:
+- `METEOR_SETTINGS_DEV`
+- `METEOR_SETTINGS_STAGING`
+- `METEOR_SETTINGS_PROD`
+
 ```yaml
 # GitHub Actions - Environment-specific deployments
 name: Deploy
@@ -175,56 +267,112 @@ jobs:
     permissions:
       contents: read
       id-token: write  # Required for Workload Identity
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github'
           service_account: 'ci-cd-deploy@PROJECT_ID.iam.gserviceaccount.com'
-      
-      - run: npm install -g meteor-cloud-run
-      
-      # Deploy with different settings based on branch
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure gsutil credentials
+        run: gcloud config set pass_credentials_to_gsutil true
+
+      - name: Install meteor-cloud-run
+        run: npm install -g meteor-cloud-run
+
+      # Deploy Development
+      - name: Create development settings file
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          mkdir -p secrets
+          echo '${{ secrets.METEOR_SETTINGS_DEV }}' > secrets/settings-dev.json
+
       - name: Deploy Development
         if: github.ref == 'refs/heads/develop'
-        run: meteor-cloud-run deploy --settings settings-dev.json
-      
+        run: meteor-cloud-run deploy --settings secrets/settings-dev.json
+
+      # Deploy Staging
+      - name: Create staging settings file
+        if: github.ref == 'refs/heads/staging'
+        run: |
+          mkdir -p secrets
+          echo '${{ secrets.METEOR_SETTINGS_STAGING }}' > secrets/settings-staging.json
+
       - name: Deploy Staging
         if: github.ref == 'refs/heads/staging'
-        run: meteor-cloud-run deploy --settings settings-staging.json
-      
+        run: meteor-cloud-run deploy --settings secrets/settings-staging.json
+
+      # Deploy Production
+      - name: Create production settings file
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p secrets
+          echo '${{ secrets.METEOR_SETTINGS_PROD }}' > secrets/settings-prod.json
+
       - name: Deploy Production
         if: github.ref == 'refs/heads/main'
-        run: meteor-cloud-run deploy --settings settings-production.json
+        run: meteor-cloud-run deploy --settings secrets/settings-prod.json
 ```
 
 ### Separate Projects per Environment
 
-Use different Google Cloud projects for each environment:
+Use different Google Cloud projects for each environment. You'll need to set up Workload Identity Federation for each project and create corresponding GitHub Secrets.
 
 ```yaml
 jobs:
   deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
     strategy:
       matrix:
         include:
           - environment: development
-            project: my-app-dev
-            settings: settings-dev.json
+            project_id: my-app-dev
+            project_number: '123456789'
+            settings_secret: METEOR_SETTINGS_DEV
           - environment: staging
-            project: my-app-staging
-            settings: settings-staging.json
+            project_id: my-app-staging
+            project_number: '987654321'
+            settings_secret: METEOR_SETTINGS_STAGING
           - environment: production
-            project: my-app-prod
-            settings: settings-prod.json
-    
+            project_id: my-app-prod
+            project_number: '456789123'
+            settings_secret: METEOR_SETTINGS_PROD
+
     steps:
-      # ... auth steps ...
-      - run: gcloud config set project ${{ matrix.project }}
-      - run: meteor-cloud-run deploy --settings ${{ matrix.settings }}
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ matrix.project_number }}/locations/global/workloadIdentityPools/github/providers/github'
+          service_account: 'ci-cd-deploy@${{ matrix.project_id }}.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure gsutil credentials
+        run: gcloud config set pass_credentials_to_gsutil true
+
+      - name: Create settings file
+        run: |
+          mkdir -p secrets
+          echo '${{ secrets[matrix.settings_secret] }}' > secrets/settings-${{ matrix.environment }}.json
+
+      - name: Install meteor-cloud-run
+        run: npm install -g meteor-cloud-run
+
+      - name: Deploy to ${{ matrix.environment }}
+        run: meteor-cloud-run deploy --settings secrets/settings-${{ matrix.environment }}.json
 ```
 
 ## Required Permissions
