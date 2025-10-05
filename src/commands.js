@@ -829,7 +829,8 @@ async function deployCommand(options) {
     }
     
     // Submit with substitutions to avoid plaintext credentials in YAML
-    let buildCommand = `gcloud builds submit --config=.meteor-cloud-run/cloudbuild.yaml --project=${config.projectId}`;
+    // Use --stream-logs to force log output to stdout (fixes CI/CD detection)
+    let buildCommand = `gcloud builds submit --config=.meteor-cloud-run/cloudbuild.yaml --project=${config.projectId} --stream-logs`;
     if (substitutions.length > 0) {
       buildCommand += ` --substitutions=${escapeShellArg(substitutions.join(','))}`;
       verboseLog(`Using secure substitutions for: ${substitutions.map(s => s.split('=')[0].replace('_', '')).join(', ')}`);

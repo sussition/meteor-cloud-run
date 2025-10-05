@@ -346,12 +346,13 @@ async function executeCommandStreaming(command) {
         resolve({ stdout: stdoutBuffer, stderr: stderrBuffer });
       } else {
         verboseLog(`Command failed with exit code ${code} after ${minutes}m ${seconds}s`);
-        verboseLog(`Deployment success check failed. Looking for success indicators in output...`);
-        verboseLog(`Checking stdout (${stdoutBuffer.length} chars) and stderr (${stderrBuffer.length} chars)`);
-        verboseLog(`Output contains 'has been deployed': ${combinedOutput.includes('has been deployed')}`);
-        verboseLog(`Output contains 'Service URL': ${combinedOutput.includes('Service URL')}`);
-        verboseLog(`Output contains 'DONE': ${combinedOutput.includes('DONE')}`);
-        verboseLog(`Output contains 'Finished Step': ${combinedOutput.includes('Finished Step')}`);
+        // Only log detailed check info for exit code 1 (potential false negative)
+        if (code === 1) {
+          verboseLog(`Checked for deployment success indicators:`);
+          verboseLog(`  - 'has been deployed': ${combinedOutput.includes('has been deployed')}`);
+          verboseLog(`  - 'Service URL': ${combinedOutput.includes('Service URL')}`);
+          verboseLog(`  - 'DONE' + 'Finished Step': ${combinedOutput.includes('DONE') && combinedOutput.includes('Finished Step')}`);
+        }
         const error = new Error(`Command failed with exit code ${code}`);
         error.stdout = stdoutBuffer;
         error.stderr = stderrBuffer;
