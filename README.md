@@ -10,17 +10,23 @@ Deploy Meteor.js applications to Google Cloud Run with automatic scaling, secure
 ## 🚀 Quick Start
 
 ```bash
-# Install
+# 1. Install Google Cloud CLI: https://cloud.google.com/sdk/docs/install
+
+# 2. Authenticate with Google Cloud
+gcloud auth login
+gcloud auth application-default login
+
+# 3. Install meteor-cloud-run
 npm install -g meteor-cloud-run
 
-# In your Meteor app directory
+# 4. In your Meteor app directory
 meteor-cloud-run init   # Interactive setup
 meteor-cloud-run deploy # Deploy to Cloud Run
 
 # Your app is live at *.run.app!
 ```
 
-The tool handles all Google Cloud setup, authentication, permissions, and configuration automatically.
+The tool handles all Google Cloud setup, permissions, and configuration automatically.
 
 ## ✨ Key Features
 
@@ -36,6 +42,7 @@ The tool handles all Google Cloud setup, authentication, permissions, and config
 ## 📋 Prerequisites
 
 - Node.js >= 18
+- **Google Cloud CLI (gcloud)** - [Installation guide](https://cloud.google.com/sdk/docs/install)
 - Google Cloud account with billing enabled
 - **New GCP project recommended** (for resource isolation and easier cleanup)
 - Meteor.js application
@@ -43,6 +50,33 @@ The tool handles all Google Cloud setup, authentication, permissions, and config
 - Meteor settings.json file with database credentials
 
 ## 📥 Installation
+
+### 1. Install Google Cloud CLI
+
+First, install the gcloud CLI if you haven't already:
+
+**macOS:**
+```bash
+brew install --cask google-cloud-sdk
+```
+
+**Linux:**
+```bash
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+```
+
+**Windows:**
+Download and run the installer from https://cloud.google.com/sdk/docs/install
+
+### 2. Authenticate with Google Cloud
+
+```bash
+gcloud auth login
+gcloud auth application-default login
+```
+
+### 3. Install meteor-cloud-run
 
 ```bash
 npm install -g meteor-cloud-run
