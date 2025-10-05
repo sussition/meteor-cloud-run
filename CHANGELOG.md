@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added verbose logging to help debug deployment status detection
 - Now correctly detects successful deployments when gcloud outputs to stderr
 
+### Improved
+- **Docker Base Image Selection**: Smarter Meteor version to Docker image mapping
+- Improved version fallback logic with curated list of known stable versions
+- Better handling of patch versions (e.g., 3.3.2 now correctly maps to 3.3.2 base image)
+- Added comprehensive version fallback tests
+
 ## [1.0.1] - 2025-10-05
 
 ### Fixed
