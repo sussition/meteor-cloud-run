@@ -1,6 +1,6 @@
 {
     "name": "meteor-cloud-run",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "A CLI tool to easily deploy Meteor.js applications to Google Cloud Run",
     "main": "src/index.js",
     "bin": {

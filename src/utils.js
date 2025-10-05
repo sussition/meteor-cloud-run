@@ -331,9 +331,11 @@ async function executeCommandStreaming(command) {
       // - "has been deployed and is serving" - Cloud Run deployment confirmation
       // - "Service URL:" - Service was created/updated successfully
       // - "DONE" + "Finished Step" - Cloud Build completed all steps
-      const deploymentSucceeded = stdoutBuffer.includes('has been deployed and is serving') ||
-                                   stdoutBuffer.includes('Service URL:') ||
-                                   (stdoutBuffer.includes('DONE') && stdoutBuffer.includes('Finished Step'));
+      // Check both stdout and stderr as gcloud may output to either
+      const combinedOutput = stdoutBuffer + stderrBuffer;
+      const deploymentSucceeded = combinedOutput.includes('has been deployed and is serving') ||
+                                   combinedOutput.includes('Service URL:') ||
+                                   (combinedOutput.includes('DONE') && combinedOutput.includes('Finished Step'));
 
       if (code === 0 || (code === 1 && deploymentSucceeded)) {
         if (code === 1 && deploymentSucceeded) {
@@ -344,6 +346,12 @@ async function executeCommandStreaming(command) {
         resolve({ stdout: stdoutBuffer, stderr: stderrBuffer });
       } else {
         verboseLog(`Command failed with exit code ${code} after ${minutes}m ${seconds}s`);
+        verboseLog(`Deployment success check failed. Looking for success indicators in output...`);
+        verboseLog(`Checking stdout (${stdoutBuffer.length} chars) and stderr (${stderrBuffer.length} chars)`);
+        verboseLog(`Output contains 'has been deployed': ${combinedOutput.includes('has been deployed')}`);
+        verboseLog(`Output contains 'Service URL': ${combinedOutput.includes('Service URL')}`);
+        verboseLog(`Output contains 'DONE': ${combinedOutput.includes('DONE')}`);
+        verboseLog(`Output contains 'Finished Step': ${combinedOutput.includes('Finished Step')}`);
         const error = new Error(`Command failed with exit code ${code}`);
         error.stdout = stdoutBuffer;
         error.stderr = stderrBuffer;
@@ -420,81 +428,51 @@ async function getCompatibleBaseImage(meteorVersion) {
 
 function getCompatibleBaseImageFallback(meteorVersion) {
   try {
-    // Parse version components for compatibility mapping
-    const [major, minor] = meteorVersion.split('.').map(Number);
-    
-    // Define known compatible base images (fallback when API fails)
-    const compatibilityMap = {
-      // Meteor 3.x versions - use appropriate 3.x base images
-      3: {
-        0: 'geoffreybooth/meteor-base:3.0',
-        1: 'geoffreybooth/meteor-base:3.1', 
-        2: 'geoffreybooth/meteor-base:3.2',
-        3: 'geoffreybooth/meteor-base:3.2', // 3.3 -> use 3.2 as fallback
-        default: 'geoffreybooth/meteor-base:3.0' // fallback for unknown 3.x versions
-      },
-      // Meteor 2.x versions
-      2: {
-        16: 'geoffreybooth/meteor-base:2.16',
-        15: 'geoffreybooth/meteor-base:2.15',
-        14: 'geoffreybooth/meteor-base:2.14',
-        13: 'geoffreybooth/meteor-base:2.13',
-        12: 'geoffreybooth/meteor-base:2.12',
-        11: 'geoffreybooth/meteor-base:2.11',
-        10: 'geoffreybooth/meteor-base:2.10',
-        9: 'geoffreybooth/meteor-base:2.9',
-        8: 'geoffreybooth/meteor-base:2.8',
-        7: 'geoffreybooth/meteor-base:2.7',
-        6: 'geoffreybooth/meteor-base:2.6',
-        5: 'geoffreybooth/meteor-base:2.5',
-        default: 'geoffreybooth/meteor-base:2.12' // fallback for unknown 2.x versions
-      },
-      // Meteor 1.x versions
-      1: 'geoffreybooth/meteor-base:1.12'
+    // Parse version components
+    const [major, minor, patch] = meteorVersion.split('.').map(Number);
+
+    // Define known stable versions that we know exist
+    // This is a smaller, curated list of confirmed stable versions
+    const knownStableVersions = {
+      3: [0, 1, 2, 3], // Meteor 3.x stable minors
+      2: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // Meteor 2.x stable minors
+      1: [12] // Meteor 1.x stable minor
     };
-    
-    // Try exact version match first
-    const knownVersions = [
-      // Meteor 1.x
-      '1.8', '1.9', '1.10', '1.11', '1.12',
-      // Meteor 2.x  
-      '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.9',
-      '2.10', '2.11', '2.12', '2.13', '2.14', '2.15', '2.16',
-      // Meteor 3.x
-      '3.0', '3.1', '3.2'
-    ];
-    
+
     const majorMinor = `${major}.${minor}`;
-    if (knownVersions.includes(majorMinor)) {
-      const exactMatch = `geoffreybooth/meteor-base:${majorMinor}`;
-      verboseLog(`Using exact fallback version match: ${exactMatch}`);
+
+    // Strategy 1: Try exact major.minor match (optimistic - assume it exists)
+    // This allows the code to work with newer versions without updates
+    verboseLog(`Attempting optimistic exact match: geoffreybooth/meteor-base:${majorMinor}`);
+    const exactMatch = `geoffreybooth/meteor-base:${majorMinor}`;
+
+    // Strategy 2: If we have known stable versions, validate against them
+    if (knownStableVersions[major] && knownStableVersions[major].includes(minor)) {
+      verboseLog(`Confirmed stable version match: ${exactMatch}`);
       return exactMatch;
     }
-    
-    // Use compatibility map for unknown versions
-    let baseImage;
-    if (major >= 3) {
-      const version3Map = compatibilityMap[3];
-      baseImage = version3Map[minor] || version3Map.default;
-      verboseLog(`Meteor 3.x detected: Using ${baseImage} for version ${meteorVersion}`);
-    } else if (major === 2) {
-      const version2Map = compatibilityMap[2];
-      baseImage = version2Map[minor] || version2Map.default;
-      verboseLog(`Meteor 2.x detected: Using ${baseImage} for version ${meteorVersion}`);
-    } else if (major === 1) {
-      baseImage = compatibilityMap[1];
-      verboseLog(`Meteor 1.x detected: Using ${baseImage} for version ${meteorVersion}`);
-    } else {
-      verboseLog(`Unknown Meteor version ${meteorVersion}, using latest stable base image`);
-      baseImage = 'geoffreybooth/meteor-base:3.0'; // Use latest stable
+
+    // Strategy 3: For unknown versions, find closest known stable version
+    if (knownStableVersions[major]) {
+      const availableMinors = knownStableVersions[major];
+
+      // Find closest minor version (prefer lower or equal)
+      const closestMinor = availableMinors
+        .filter(m => m <= minor)
+        .sort((a, b) => b - a)[0] || availableMinors[availableMinors.length - 1];
+
+      const closestMatch = `geoffreybooth/meteor-base:${major}.${closestMinor}`;
+      verboseLog(`Using closest stable version: ${closestMatch} for ${meteorVersion}`);
+      return closestMatch;
     }
-    
-    verboseLog(`Using compatible fallback base image: ${baseImage}`);
-    return baseImage;
-    
+
+    // Strategy 4: For completely unknown major versions, use latest tag
+    verboseLog(`Unknown Meteor version ${meteorVersion}, using latest tag`);
+    return 'geoffreybooth/meteor-base:latest';
+
   } catch (error) {
     verboseLog(`Error parsing Meteor version ${meteorVersion}: ${error.message}`);
-    return 'geoffreybooth/meteor-base:2.12'; // Default fallback
+    return 'geoffreybooth/meteor-base:latest'; // Ultimate fallback
   }
 }
 
