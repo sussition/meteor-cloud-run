@@ -5,7 +5,7 @@ All notable changes to meteor-cloud-run will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.3] - 2025-10-05
+## [1.0.4] - 2025-10-05
 
 ### Fixed
 - **Critical**: Fixed false deployment failures in CI/CD environments when log streaming is unavailable
@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - Better error handling for gcloud builds submit exit code 1 scenarios
 - Deployment verification now works in restricted permission environments
+
+## [1.0.3] - 2025-10-05 [YANKED]
+
+### Note
+- This version was yanked due to a broken --stream-logs flag that doesn't exist in gcloud CLI
 
 ## [1.0.2] - 2025-10-05
 
